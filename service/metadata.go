@@ -28,6 +28,10 @@ func ExtractMetadata(data []byte) (Metadata, error) {
 	m := Metadata{Size: len(data)}
 
 	ex, exErr := imagemeta.Decode(bytes.NewReader(data))
+    
+	
+
+
 	if exErr == nil {
 		m.Format = ex.ImageType.String()
 		m.Width, m.Height = int(ex.ExifIFD.PixelXDimension), int(ex.ExifIFD.PixelYDimension)
