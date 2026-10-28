@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/eunice99x/pixely/kyc/db"
+	"github.com/eunice99x/pixely/kyc/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -19,6 +20,10 @@ func main() {
 		log.Fatalf("error opening db: %v", err)
 	}
 	defer db.Close()
+
+	h := handler.New(db.GetDB())
+	r.Post("/upload", h.Upload)
+	r.Get("/images/{id}", h.GetMetadata)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
