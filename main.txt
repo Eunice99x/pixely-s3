@@ -1,0 +1,2 @@
+task: create an app where a user can upload an image and i save it to S3 
+then i proseed to extract the metadata 
