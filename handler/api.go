@@ -45,17 +45,13 @@ func (h *Handler) Upload(c *echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	img.Key = uuid.NewString() + "." + img.Format
-	if err := h.store.Upload(ctx, img.Key, data); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "upload failed: "+err.Error())
-	}
-
+	img.Key = uuid.NewString() + ".json"
 	if err := h.db.WithContext(ctx).Create(&img).Error; err != nil {
 		return err
 	}
 
 	metaJSON, _ := json.Marshal(img)
-	if err := h.store.Upload(ctx, img.Key+".json", metaJSON); err != nil {
+	if err := h.store.Upload(ctx, img.Key, metaJSON); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "metadata upload failed: "+err.Error())
 	}
 
