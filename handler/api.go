@@ -2,78 +2,80 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/eunice99x/pixely/kyc/service"
 	"github.com/eunice99x/pixely/kyc/storage"
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
+	"github.com/labstack/echo/v5"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
-	db    *sqlx.DB
+	db    *gorm.DB
 	store *storage.S3Bucket
 }
 
-func New(db *sqlx.DB, store *storage.S3Bucket) *Handler {
+func New(db *gorm.DB, store *storage.S3Bucket) *Handler {
 	return &Handler{db: db, store: store}
 }
 
-func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
-	file, _, err := r.FormFile("image")
+func (h *Handler) Upload(c *echo.Context) error {
+	fh, err := c.FormFile("image")
 	if err != nil {
-		http.Error(w, "missing image", http.StatusBadRequest)
-		return
+		return echo.NewHTTPError(http.StatusBadRequest, "missing image")
+	}
+	file, err := fh.Open()
+	if err != nil {
+		return err
 	}
 	defer file.Close()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 
-	meta, err := service.ExtractMetadata(data)
+	img, err := service.ExtractMetadata(data)
 	if err != nil {
-		http.Error(w, "not a valid image", http.StatusBadRequest)
-		return
+		return echo.NewHTTPError(http.StatusBadRequest, "not a valid image")
 	}
 
-	meta.Key = uuid.NewString() + "." + meta.Format
-	if err := h.store.Upload(r.Context(), meta.Key, data); err != nil {
-		http.Error(w, "upload failed: "+err.Error(), http.StatusInternalServerError)
-		return
+	ctx := c.Request().Context()
+	img.Key = uuid.NewString() + "." + img.Format
+	if err := h.store.Upload(ctx, img.Key, data); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "upload failed: "+err.Error())
 	}
 
-	err = h.db.QueryRow(
-		`INSERT INTO images (key, format, width, height, size, make, model, taken_at, lat, lng)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-		meta.Key, meta.Format, meta.Width, meta.Height, meta.Size,
-		meta.Make, meta.Model, meta.TakenAt, meta.Lat, meta.Lng,
-	).Scan(&meta.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if err := h.db.WithContext(ctx).Create(&img).Error; err != nil {
+		return err
 	}
 
-	metaJSON, _ := json.Marshal(meta)
-	if err := h.store.Upload(r.Context(), meta.Key+".json", metaJSON); err != nil {
-		http.Error(w, "metadata upload failed: "+err.Error(), http.StatusInternalServerError)
-		return
+	metaJSON, _ := json.Marshal(img)
+	if err := h.store.Upload(ctx, img.Key+".json", metaJSON); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "metadata upload failed: "+err.Error())
 	}
 
-	json.NewEncoder(w).Encode(meta)
+	return c.JSON(http.StatusOK, img)
 }
 
-func (h *Handler) GetMetadata(w http.ResponseWriter, r *http.Request) {
-	var meta service.Metadata
-	err := h.db.Get(&meta, `SELECT * FROM images WHERE id = $1`, chi.URLParam(r, "id"))
+func (h *Handler) GetMetadata(c *echo.Context) error {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
 	}
 
-	json.NewEncoder(w).Encode(meta)
+	var img service.Image
+	err = h.db.WithContext(c.Request().Context()).First(&img, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return echo.NewHTTPError(http.StatusNotFound, "not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, img)
 }

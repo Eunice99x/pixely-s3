@@ -2,30 +2,22 @@ package db
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
-type Database struct {
-	db *sqlx.DB
-}
+func NewDatabase() (*gorm.DB, error) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgresql://postgres:postgres@localhost:5433/ecomm?sslmode=disable"
+	}
 
-func NewDatabase() (*Database, error) {
-
-	db, err := sqlx.Open("postgres", "postgresql://postgres:postgres@localhost:5433/ecomm?sslmode=disable")
-
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	return &Database{db: db}, nil
-}
-
-func (d *Database) Close() error {
-	return d.db.Close()
-}
-
-func (d *Database) GetDB() *sqlx.DB {
-	return d.db
+	return db, nil
 }
