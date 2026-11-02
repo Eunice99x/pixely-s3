@@ -10,7 +10,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
 	github.com/evanoberholster/imagemeta v1.1.0
 	github.com/google/uuid v1.6.0
-	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v5 v5.4.4
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.3
